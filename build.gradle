@@ -1,0 +1,46 @@
+plugins {
+    id 'base' // Provides standard 'build', 'clean', and 'assemble' lifecycle tasks at root
+    id 'net.fabricmc.fabric-loom' version '1.18.1' apply false
+    id 'net.neoforged.moddev' version '2.0.147' apply false
+}
+
+subprojects { Project sub ->
+    if (sub.name in ['common', 'fabric', 'neoforge']) {
+        apply from: "${rootDir}/gradle/platform.gradle"
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Root Collection & Lifecycle Tasks
+// -----------------------------------------------------------------------------
+
+// Collects final release jars into root build/libs/<mod-name>/
+tasks.register('collectJars', Sync) {
+    group = 'build'
+    description = 'Collects all built mod jars into root build/libs/<mod>/.'
+    into rootProject.layout.buildDirectory.dir('libs')
+
+    // Depend on build tasks of active subprojects (skipping container projects like :mod-a)
+    dependsOn subprojects.findAll { it.name in ['common', 'fabric', 'neoforge'] }.collect { "${it.path}:build" }
+
+    // Collect release jars into their respective mod folder (excluding sources & javadoc)
+    subprojects.findAll { it.name in ['fabric', 'neoforge'] }.each { p ->
+        def modSlug = p.parent.name
+        from(p.layout.buildDirectory.dir('libs')) {
+            into modSlug
+            include '*.jar'
+            exclude '*-sources.jar'
+            exclude '*-javadoc.jar'
+        }
+    }
+}
+
+// Hook collection into root's standard lifecycle build task
+tasks.named('build') {
+    dependsOn 'collectJars'
+}
+
+// Hook recursive clean into root's standard lifecycle clean task
+tasks.named('clean') {
+    dependsOn subprojects.findAll { it.name in ['common', 'fabric', 'neoforge'] }.collect { "${it.path}:clean" }
+}

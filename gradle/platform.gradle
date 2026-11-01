@@ -1,0 +1,309 @@
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.api.tasks.javadoc.Javadoc
+import org.gradle.jvm.tasks.Jar
+
+// ==============================================================================
+// Monorepo Multi-Platform Convention Script
+// Configures conventions across common, fabric, and neoforge subprojects.
+// ==============================================================================
+
+def sub = project
+def modProject = sub.parent
+def modSlug = modProject.name
+
+// Resolve property from mod overrides first, then root defaults
+def modProp = { String key -> modProject.findProperty(key) ?: rootProject.findProperty(key) }
+
+// -----------------------------------------------------------------------------
+// 1. METADATA & VERSION RESOLUTION
+// -----------------------------------------------------------------------------
+def mcVersion = modProp('minecraft_version')
+def rawModVersion = modProp('version')
+
+sub.group = modProp('group')
+// Unified Versioning: <mod_version>-<minecraft_version> (e.g. 1.0.0-26.3)
+sub.version = rawModVersion.endsWith("-${mcVersion}") ? rawModVersion : "${rawModVersion}-${mcVersion}"
+sub.description = modProp('description')
+
+sub.ext {
+    mod_id = modProject.findProperty('mod_id') ?: modSlug.replace('-', '_')
+    mod_name = modProject.findProperty('mod_name') ?: modSlug.capitalize()
+    mod_author = modProject.findProperty('mod_author') ?: 'Strange Quark'
+    mod_version = rawModVersion
+    mod_license = modProject.findProperty('license') ?: 'All-Rights-Reserved'
+    credits = modProject.findProperty('credits') ?: ''
+}
+
+// -----------------------------------------------------------------------------
+// 2. BASE JAVA & PACKAGING CONVENTIONS (Shared by all platforms)
+// -----------------------------------------------------------------------------
+sub.apply plugin: 'java-library'
+sub.apply plugin: 'maven-publish'
+
+// Unified Archive & Maven Artifact Naming: <mod_id>-<platform> (e.g. mod_a-fabric)
+// Generates jar filename: <archivesName>-<version>.jar -> mod_a-fabric-1.0.0-26.3.jar
+sub.base {
+    archivesName.set("${sub.ext.mod_id}-${sub.name}")
+}
+
+sub.java {
+    def javaVer = modProp('java_version') as Integer
+    toolchain.languageVersion = JavaLanguageVersion.of(javaVer)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+// Global Mixin & MixinExtras annotations across all platforms
+sub.dependencies {
+    compileOnly 'net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7'
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.5.3'
+    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.5.3'
+}
+
+sub.tasks.withType(Jar).configureEach {
+    def modLicense = modProject.file('LICENSE')
+    def licenseFile = modLicense.exists() ? modLicense : rootProject.file('LICENSE')
+    if (licenseFile.exists() && name in ['jar', 'remapJar']) {
+        from(licenseFile) {
+            rename { "${it}_${sub.ext.mod_id}" }
+        }
+    }
+
+    manifest {
+        attributes([
+                'Specification-Title'   : sub.ext.mod_name,
+                'Specification-Vendor'  : sub.ext.mod_author,
+                'Specification-Version' : sub.ext.mod_version,
+                'Implementation-Title'  : sub.base.archivesName.get(),
+                'Implementation-Version': sub.version,
+                'Implementation-Vendor' : sub.ext.mod_author,
+                'Built-On-Minecraft'    : mcVersion
+        ])
+    }
+}
+
+sub.tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+sub.processResources {
+    var expandProps = [
+            // Mod Identity & Metadata
+            'mod_id'                       : sub.ext.mod_id,
+            'mod_name'                     : sub.ext.mod_name,
+            'mod_author'                   : sub.ext.mod_author,
+            'mod_version'                  : sub.ext.mod_version,
+            'version'                      : sub.version,
+            'group'                        : sub.group,
+            'description'                  : sub.description,
+            'license'                      : sub.ext.mod_license,
+            'mod_license'                  : sub.ext.mod_license,
+            'credits'                      : sub.ext.credits,
+
+            // Core Environment
+            'java_version'                 : modProp('java_version'),
+            'minecraft_version'            : mcVersion,
+            'minecraft_version_range'      : modProp('minecraft_version_range'),
+
+            // Fabric Platform
+            'fabric_version'               : modProp('fabric_version'),
+            'fabric_loader_version'        : modProp('fabric_loader_version'),
+
+            // NeoForge Platform
+            'neoforge_version'             : modProp('neoforge_version'),
+            'neoforge_loader_version_range': modProp('neoforge_loader_version_range')
+    ]
+
+    var jsonExpandProps = expandProps.collectEntries {
+        key, value -> [(key): value instanceof String ? value.replace('\\', '\\\\').replace('"', '\\"').replace('\r\n', '\\n').replace('\n', '\\n') : value]
+    }
+
+    filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
+        expand expandProps
+    }
+
+    filesMatching(['pack.mcmeta', 'fabric.mod.json', '*.mixins.json']) {
+        expand jsonExpandProps
+    }
+
+    inputs.properties(expandProps)
+}
+
+sub.plugins.withId('maven-publish') {
+    sub.extensions.configure(PublishingExtension) { publishing ->
+        publishing.publications {
+            register('mavenJava', MavenPublication) {
+                groupId = sub.group
+                artifactId = sub.base.archivesName.get()
+                version = sub.version
+                from sub.components.java
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 3. COMMON PLATFORM (Vanilla + NeoForm decompiled sources)
+// -----------------------------------------------------------------------------
+if (sub.name == 'common') {
+    sub.apply plugin: 'net.neoforged.moddev'
+
+    sub.neoForge {
+        neoFormVersion = modProp('neo_form_version')
+        def at = sub.file('src/main/resources/META-INF/accesstransformer.cfg')
+        if (at.exists()) {
+            accessTransformers.from(at.absolutePath)
+        }
+    }
+
+    // Export raw source directories so loaders can compile common code directly
+    sub.configurations {
+        commonJava {
+            canBeResolved = false
+            canBeConsumed = true
+        }
+        commonResources {
+            canBeResolved = false
+            canBeConsumed = true
+        }
+    }
+
+    sub.artifacts {
+        commonJava sub.sourceSets.main.java.sourceDirectories.singleFile
+        commonResources sub.sourceSets.main.resources.sourceDirectories.singleFile
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 4. LOADER PLATFORMS (Fabric & NeoForge - consuming Common sources)
+// -----------------------------------------------------------------------------
+if (sub.name in ['fabric', 'neoforge']) {
+    sub.configurations {
+        commonJava { canBeResolved = true }
+        commonResources { canBeResolved = true }
+    }
+
+    def commonPath = "${modProject.path}:common"
+    def commonDep = sub.dependencies.project(path: commonPath)
+    def commonJavaDep = sub.dependencies.project(path: commonPath, configuration: 'commonJava')
+    def commonResDep = sub.dependencies.project(path: commonPath, configuration: 'commonResources')
+
+    sub.dependencies {
+        // compileOnly project dependency is required for IDE (IntelliJ) symbol resolution
+        compileOnly commonDep
+        commonJava commonJavaDep
+        commonResources commonResDep
+    }
+
+    sub.tasks.named('compileJava', JavaCompile) {
+        dependsOn(sub.configurations.commonJava)
+        source(sub.configurations.commonJava)
+    }
+
+    sub.tasks.named('sourcesJar', Jar) {
+        dependsOn(sub.configurations.commonJava)
+        from(sub.configurations.commonJava)
+    }
+
+    sub.tasks.named('javadoc', Javadoc) {
+        dependsOn(sub.configurations.commonJava)
+        source(sub.configurations.commonJava)
+    }
+
+    sub.processResources {
+        dependsOn(sub.configurations.commonResources)
+        from(sub.configurations.commonResources)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 5. FABRIC PLATFORM CONFIGURATION (Loom)
+// -----------------------------------------------------------------------------
+if (sub.name == 'fabric') {
+    sub.apply plugin: 'net.fabricmc.fabric-loom'
+
+    sub.dependencies {
+        minecraft "com.mojang:minecraft:${mcVersion}"
+        implementation "net.fabricmc:fabric-loader:${modProp('fabric_loader_version')}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${modProp('fabric_version')}"
+    }
+
+    sub.extensions.configure('loom') { loom ->
+        def aw = sub.project("${modProject.path}:common").file("src/main/resources/${sub.ext.mod_id}.accesswidener")
+        if (aw.exists()) {
+            loom.accessWidenerPath.set(aw)
+        }
+
+        loom.runs {
+            client {
+                client()
+                setConfigName("${sub.ext.mod_name} Fabric Client")
+                ideConfigGenerated(true)
+                runDir("runs/client")
+            }
+            server {
+                server()
+                setConfigName("${sub.ext.mod_name} Fabric Server")
+                ideConfigGenerated(true)
+                runDir("runs/server")
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 6. NEOFORGE PLATFORM CONFIGURATION (ModDevGradle)
+// -----------------------------------------------------------------------------
+if (sub.name == 'neoforge') {
+    sub.apply plugin: 'net.neoforged.moddev'
+
+    sub.extensions.configure('neoForge') { neoForge ->
+        neoForge.version = modProp('neoforge_version')
+
+        def at = sub.project("${modProject.path}:common").file('src/main/resources/META-INF/accesstransformer.cfg')
+        if (at.exists()) {
+            neoForge.accessTransformers.from(at.absolutePath)
+        }
+
+        neoForge.runs {
+            configureEach {
+                ideName = "${sub.ext.mod_name} NeoForge ${it.name.capitalize()}"
+                systemProperty('neoforge.enabledGameTestNamespaces', sub.ext.mod_id)
+            }
+            client {
+                client()
+                gameDirectory = sub.mkdir(sub.file('runs/client'))
+            }
+            server {
+                server()
+                gameDirectory = sub.mkdir(sub.file('runs/server'))
+            }
+            data {
+                clientData()
+                gameDirectory = sub.mkdir(sub.file('runs/data'))
+                programArguments.addAll '--mod', sub.ext.mod_id, '--all', '--output', sub.file('src/generated/resources/').absolutePath, '--existing', sub.file('src/main/resources/').absolutePath
+            }
+        }
+
+        neoForge.mods {
+            "${sub.ext.mod_id}" {
+                sourceSet sub.sourceSets.main
+            }
+        }
+    }
+
+    sub.sourceSets.main.resources { srcDir 'src/generated/resources' }
+}
+
+// -----------------------------------------------------------------------------
+// 7. OPTIONAL 3RD-PARTY LIBRARIES (Configured per mod in gradle.properties)
+// -----------------------------------------------------------------------------
+def extraDeps = modProject.findProperty("${sub.name}_deps")
+if (extraDeps) {
+    extraDeps.toString().split(',').collect { it.trim() }.findAll { it }.each { dep ->
+        sub.dependencies.add('implementation', dep)
+    }
+}

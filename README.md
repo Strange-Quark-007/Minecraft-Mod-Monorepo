@@ -1,0 +1,83 @@
+# Minecraft Mod Monorepo Template
+
+A Gradle project template for developing and maintaining **multiple Minecraft mods** across **multiple modloaders** (Fabric & NeoForge) inside a single monorepo, using source-shared common projects without third-party frameworks or shadow jars.
+
+## Getting Started
+
+### IntelliJ IDEA
+
+1. Clone or download this repository.
+2. In `settings.gradle`, set `rootProject.name` to match your repository folder name if you rename it.
+3. Open the repository root folder in IntelliJ IDEA.
+4. Ensure your Gradle JVM and Project SDK are set to **Java 25**:
+   - **Gradle JVM:** `Settings > Build, Execution, Deployment > Build Tools > Gradle`
+   - **Project SDK:** `Project Structure > Project > SDK`
+5. Click **Reload All Gradle Projects** in the Gradle tool window.
+6. Under your Run/Debug Configurations dropdown at the top toolbar, you will see client configurations for each enabled mod (e.g., `Mod A Fabric Client`, `Mod A NeoForge Client`). Select one and run it.
+
+## Monorepo Structure
+
+Mods live under the `mods/` directory. Each mod has its own `common`, `fabric`, and `neoforge` subprojects alongside a local `gradle.properties` file:
+
+```
+mods/
+├── mod-a/
+│   ├── common/
+│   ├── fabric/
+│   ├── neoforge/
+│   └── gradle.properties
+└── mod-b/
+    ├── common/
+    ├── fabric/
+    ├── neoforge/
+    └── gradle.properties
+```
+
+Build conventions for all mods and loaders are managed centrally in `gradle/platform.gradle`. Individual mod folders do not require `build.gradle` files.
+
+## Adding and Removing Mods
+
+### Adding a Mod
+
+1. Open `settings.gradle` and add your mod's folder name to the `enabledMods` list:
+   ```groovy
+   def enabledMods = ['mod-a', 'mod-b', 'my-new-mod']
+   ```
+2. Create `mods/my-new-mod/` (you can copy `mods/mod-a` as a template), then rename the placeholder `com.example.moda` packages in its `common`, `fabric`, and `neoforge` sources to your own package.
+3. Set your mod's identity in `mods/my-new-mod/gradle.properties`:
+   ```properties
+   mod_id=my_new_mod
+   mod_name=My New Mod
+   version=1.0.0
+   group=com.example.mynewmod
+   mod_author=Strange Quark
+   description=A brand new mod in the monorepo.
+   license=MIT
+   ```
+4. Reload Gradle in IntelliJ.
+
+### Removing or Disabling a Mod
+
+Remove or comment out the mod name from `enabledMods` in `settings.gradle`. The folder can remain on disk without being evaluated or built by Gradle.
+
+## Development Guide
+
+* **Common Subproject:** Develop the majority of your mod in each mod's `common` project. It compiles against vanilla Minecraft (via NeoForm) and contains shared logic and Mixins. Common code cannot access loader-specific APIs.
+* **Loader Subprojects:** The `fabric` and `neoforge` projects load the common code and define platform-specific implementations. They have access to all common code, but common code cannot directly access loader code.
+* **Platform Abstraction:** To call platform-specific logic from common code, use the included `IPlatformHelper` interface via Java's `ServiceLoader` (`Services.PLATFORM`).
+
+## Common Gradle Tasks
+
+* `./gradlew build` - Compiles all active mods and collects their final jars into `build/libs/<mod>/`.
+* `./gradlew clean` - Deletes build directories across all mods and the root project.
+* `./gradlew :<mod>:fabric:runClient` - Runs the Fabric client for a specific mod.
+* `./gradlew :<mod>:neoforge:runClient` - Runs the NeoForge client for a specific mod.
+* `./gradlew :<mod>:fabric:build` - Builds only the Fabric jar for a single mod.
+
+All built mod jars follow the `<mod_id>-<loader>-<mod_version>-<mc_version>.jar` (e.g. `mod_a-fabric-1.0.0-26.3.jar`) naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`) for easy manual testing and uploading to CurseForge or Modrinth.
+
+## License
+
+The template infrastructure and build scripts are licensed under the [MIT License](LICENSE). 
+
+Each mod inside `mods/` can declare its own license in its `gradle.properties` file and provide a corresponding `LICENSE` file in its mod folder (`mods/<mod>/LICENSE`).
