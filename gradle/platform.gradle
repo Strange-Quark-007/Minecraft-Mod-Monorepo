@@ -23,17 +23,17 @@ def mcVersion = modProp('minecraft_version')
 def rawModVersion = modProp('version')
 
 sub.group = modProp('group')
-// Unified Versioning: <mod_version>-<minecraft_version> (e.g. 1.0.0-26.3)
-sub.version = rawModVersion.endsWith("-${mcVersion}") ? rawModVersion : "${rawModVersion}-${mcVersion}"
-sub.description = modProp('description')
+// Unified Versioning: <mod_version>-<minecraft_version>
+sub.version = "${rawModVersion}-${mcVersion}"
+sub.description = modProp('description') ?: ''
 
 sub.ext {
     mod_id = modProject.findProperty('mod_id') ?: modSlug.replace('-', '_')
-    mod_name = modProject.findProperty('mod_name') ?: modSlug.capitalize()
-    mod_author = modProject.findProperty('mod_author') ?: 'Strange Quark'
+    mod_name = modProject.findProperty('mod_name') ?: modSlug
+    mod_author = modProp('mod_author')
     mod_version = rawModVersion
-    mod_license = modProject.findProperty('license') ?: 'All-Rights-Reserved'
-    credits = modProject.findProperty('credits') ?: ''
+    mod_license = modProp('license')
+    credits = modProp('credits') ?: ''
 }
 
 // -----------------------------------------------------------------------------
@@ -42,8 +42,8 @@ sub.ext {
 sub.apply plugin: 'java-library'
 sub.apply plugin: 'maven-publish'
 
-// Unified Archive & Maven Artifact Naming: <mod_id>-<platform> (e.g. mod_a-fabric)
-// Generates jar filename: <archivesName>-<version>.jar -> mod_a-fabric-1.0.0-26.3.jar
+// Unified Archive & Maven Artifact Naming: <mod_id>-<platform>
+// Generates jar filename: <archivesName>-<version>.jar
 sub.base {
     archivesName.set("${sub.ext.mod_id}-${sub.name}")
 }
@@ -66,9 +66,7 @@ sub.tasks.withType(Jar).configureEach {
     def modLicense = modProject.file('LICENSE')
     def licenseFile = modLicense.exists() ? modLicense : rootProject.file('LICENSE')
     if (licenseFile.exists() && name in ['jar', 'remapJar']) {
-        from(licenseFile) {
-            rename { "${it}_${sub.ext.mod_id}" }
-        }
+        from(licenseFile)
     }
 
     manifest {
@@ -100,13 +98,14 @@ sub.processResources {
             'group'                        : sub.group,
             'description'                  : sub.description,
             'license'                      : sub.ext.mod_license,
-            'mod_license'                  : sub.ext.mod_license,
             'credits'                      : sub.ext.credits,
 
             // Core Environment
             'java_version'                 : modProp('java_version'),
             'minecraft_version'            : mcVersion,
             'minecraft_version_range'      : modProp('minecraft_version_range'),
+            'pack_format_min'              : modProp('pack_format_min') ?: modProp('pack_format'),
+            'pack_format_max'              : modProp('pack_format_max') ?: modProp('pack_format'),
 
             // Fabric Platform
             'fabric_version'               : modProp('fabric_version'),

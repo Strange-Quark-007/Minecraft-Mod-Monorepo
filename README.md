@@ -9,7 +9,7 @@ A Gradle project template for developing and maintaining **multiple Minecraft mo
 1. Clone or download this repository.
 2. In `settings.gradle`, set `rootProject.name` to match your repository folder name if you rename it.
 3. Open the repository root folder in IntelliJ IDEA.
-4. Ensure your Gradle JVM and Project SDK are set to **Java 25**:
+4. Ensure your Gradle JVM and Project SDK match the `java_version` configured in `gradle.properties` (e.g. Java 25):
    - **Gradle JVM:** `Settings > Build, Execution, Deployment > Build Tools > Gradle`
    - **Project SDK:** `Project Structure > Project > SDK`
 5. Click **Reload All Gradle Projects** in the Gradle tool window.
@@ -74,7 +74,7 @@ Remove or comment out the mod name from `enabledMods` in `settings.gradle`. The 
 * `./gradlew :<mod>:neoforge:runClient` - Runs the NeoForge client for a specific mod.
 * `./gradlew :<mod>:fabric:build` - Builds only the Fabric jar for a single mod.
 
-All built mod jars follow the `<mod_id>-<loader>-<mod_version>-<mc_version>.jar` (e.g. `mod_a-fabric-1.0.0-26.3.jar`) naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`) for easy manual testing and uploading to CurseForge or Modrinth.
+All built mod jars follow the `<mod_id>-<loader>-<mod_version>-<mc_version>.jar` naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`) for easy manual testing and uploading to CurseForge or Modrinth.
 
 ## License
 
