@@ -320,3 +320,13 @@ if (extraDeps) {
         sub.dependencies.add('implementation', dep)
     }
 }
+
+// Inherit common_deps into loader projects so shared common code compiles cleanly
+if (sub.name in ['fabric', 'neoforge']) {
+    def commonDeps = modProject.findProperty('common_deps')
+    if (commonDeps) {
+        commonDeps.toString().split(',').collect { it.trim() }.findAll { it }.each { dep ->
+            sub.dependencies.add('implementation', dep)
+        }
+    }
+}
