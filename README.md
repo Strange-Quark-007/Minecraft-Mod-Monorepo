@@ -74,7 +74,7 @@ Remove or comment out the mod name from `enabledMods` in `settings.gradle`. The 
 * `./gradlew :<mod>:neoforge:runClient` - Runs the NeoForge client for a specific mod.
 * `./gradlew :<mod>:fabric:build` - Builds only the Fabric jar for a single mod.
 
-All built mod jars follow the `<mod_id>-<loader>-<mod_version>-<mc_version>.jar` naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`) for easy manual testing and uploading to CurseForge or Modrinth.
+All built mod jars follow the `<mod_id>-<mod_version>+<mc_version>-<loader>.jar` naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`) for easy manual testing and uploading to CurseForge or Modrinth.
 
 ## License
 

@@ -23,8 +23,8 @@ def mcVersion = modProp('minecraft_version')
 def rawModVersion = modProp('version')
 
 sub.group = modProp('group')
-// Unified Versioning: <mod_version>-<minecraft_version>
-sub.version = "${rawModVersion}-${mcVersion}"
+// SemVer 2.0 Versioning: <mod_version>+<minecraft_version>
+sub.version = "${rawModVersion}+${mcVersion}"
 sub.description = modProp('description') ?: ''
 
 sub.ext {
@@ -42,8 +42,7 @@ sub.ext {
 sub.apply plugin: 'java-library'
 sub.apply plugin: 'maven-publish'
 
-// Unified Archive & Maven Artifact Naming: <mod_id>-<platform>
-// Generates jar filename: <archivesName>-<version>.jar
+// SemVer 2.0 Archive Naming: <mod_id>-<mod_version>+<mc_version>-<platform>.jar
 sub.base {
     archivesName.set("${sub.ext.mod_id}-${sub.name}")
 }
@@ -63,6 +62,21 @@ sub.dependencies {
 }
 
 sub.tasks.withType(Jar).configureEach {
+    archiveBaseName.set(sub.ext.mod_id)
+    archiveVersion.set(sub.version)
+
+    if (name in ['jar', 'remapJar']) {
+        if (sub.name == 'fabric' && name == 'jar') {
+            archiveClassifier.set("${sub.name}-dev")
+        } else {
+            archiveClassifier.set(sub.name)
+        }
+    } else if (name == 'sourcesJar') {
+        archiveClassifier.set("${sub.name}-sources")
+    } else if (name == 'javadocJar') {
+        archiveClassifier.set("${sub.name}-javadoc")
+    }
+
     def modLicense = modProject.file('LICENSE')
     def licenseFile = modLicense.exists() ? modLicense : rootProject.file('LICENSE')
     if (licenseFile.exists() && name in ['jar', 'remapJar']) {

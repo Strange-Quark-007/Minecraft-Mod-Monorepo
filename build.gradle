@@ -31,6 +31,7 @@ tasks.register('collectJars', Sync) {
             include '*.jar'
             exclude '*-sources.jar'
             exclude '*-javadoc.jar'
+            exclude '*-dev.jar'
         }
     }
 }
