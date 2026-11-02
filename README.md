@@ -66,6 +66,33 @@ Remove or comment out the mod name from `enabledMods` in `settings.gradle`. The 
 * **Loader Subprojects:** The `fabric` and `neoforge` projects load the common code and define platform-specific implementations. They have access to all common code, but common code cannot directly access loader code.
 * **Platform Abstraction:** To call platform-specific logic from common code, use the included `IPlatformHelper` interface via Java's `ServiceLoader` (`Services.PLATFORM`).
 
+## Adding Dependencies
+
+### 1. Simple Java Dependencies (via `gradle.properties`)
+For standard libraries (e.g. Gson, JOML, YAML, math utilities), add comma-separated Maven coordinates directly in that mod's `mods/<mod>/gradle.properties`:
+
+```properties
+# Shared by common, fabric, and neoforge
+common_deps=org.joml:joml:1.10.8
+
+# Loader-specific dependencies
+fabric_deps=net.fabricmc.fabric-api:fabric-api-deprecated:0.1.0
+neoforge_deps=org.yaml:snakeyaml:2.2
+```
+
+### 2. Mod Dependencies & Custom Repositories (via `build.gradle`)
+For dependencies requiring custom Maven repositories or Fabric Loom's `modImplementation` (which remaps mod jars at dev time), create a standard `build.gradle` in that platform subproject (e.g., `mods/<mod>/fabric/build.gradle`):
+
+```groovy
+repositories {
+    maven { url = "https://maven.shedaniel.me/" }
+}
+
+dependencies {
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:15.0.127"
+}
+```
+
 ## Common Gradle Tasks
 
 * `./gradlew build` - Compiles all active mods and collects their final jars into `build/libs/<mod>/`.
