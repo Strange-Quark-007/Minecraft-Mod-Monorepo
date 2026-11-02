@@ -62,12 +62,13 @@ sub.tasks.withType(Jar).configureEach {
     archiveBaseName.set(sub.ext.mod_id)
     archiveVersion.set(sub.version)
 
-    if (name in ['jar', 'remapJar']) {
-        if (sub.name == 'fabric' && name == 'jar') {
-            archiveClassifier.set("${sub.name}-dev")
-        } else {
-            archiveClassifier.set(sub.name)
-        }
+    if (name == 'remapJar') {
+        archiveClassifier.set(sub.name)
+    } else if (name == 'jar') {
+        archiveClassifier.set(sub.provider {
+            def remapJar = sub.tasks.findByName('remapJar')
+            return (remapJar != null && remapJar.enabled) ? "${sub.name}-dev" : sub.name
+        })
     } else if (name == 'sourcesJar') {
         archiveClassifier.set("${sub.name}-sources")
     } else if (name == 'javadocJar') {
