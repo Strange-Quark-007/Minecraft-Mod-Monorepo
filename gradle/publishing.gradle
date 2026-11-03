@@ -1,0 +1,93 @@
+// ==============================================================================
+// Monorepo Multi-Platform Publishing Convention Script
+// Powered by me.modmuss50.mod-publish-plugin
+// ==============================================================================
+
+apply plugin: 'me.modmuss50.mod-publish-plugin'
+
+def sub = project
+def modProject = sub.parent
+def modSlug = modProject.name
+
+// Resolve property helper (mod overrides first, then root defaults)
+def modProp = { String key -> modProject.findProperty(key) ?: rootProject.findProperty(key) }
+
+def mcVersion = modProp('minecraft_version')
+def targetMcVersions = (modProp('publish_minecraft_versions') ?: modProp('minecraft_versions') ?: mcVersion).toString().split(',').collect { it.trim() }
+def releaseTypeProp = (modProp('release_type') ?: 'release').toString().toLowerCase()
+def releaseNotesFile = modProject.file('release-notes.md')
+
+def mrToken = providers.gradleProperty('MODRINTH_TOKEN').orElse(providers.environmentVariable('MODRINTH_TOKEN'))
+def cfToken = providers.gradleProperty('CURSEFORGE_TOKEN').orElse(providers.environmentVariable('CURSEFORGE_TOKEN'))
+
+def mrId = modProp('modrinth_id')
+def cfId = modProp('curseforge_id')
+
+publishMods {
+    // Both Fabric (since 26.1 without intermediary remapping) and NeoForge produce their release jar via 'jar'
+    file = tasks.named('jar').flatMap { it.archiveFile }
+
+    // Optional dryRun mode (run with -PdryRun=true to test publishing without uploading)
+    dryRun = providers.gradleProperty('dryRun').map { it.toBoolean() }.orElse(false)
+
+    // Read changelog on-demand when publishing
+    changelog = provider {
+        if (!releaseNotesFile.exists() || releaseNotesFile.text.trim().isEmpty()) {
+            throw new GradleException("Cannot publish '${sub.path}': Release notes file '${releaseNotesFile.absolutePath}' is missing or empty!")
+        }
+        return releaseNotesFile.text.trim()
+    }
+
+    // Release channel
+    type = releaseTypeProp == 'alpha' ? ALPHA : (releaseTypeProp == 'beta' ? BETA : STABLE)
+    modLoaders.add(sub.name)
+    displayName = "${sub.ext.mod_name} ${sub.version} [${sub.name.capitalize()}]"
+    version = sub.version
+
+    // Modrinth Configuration
+    if (mrId != null && !mrId.toString().trim().isEmpty()) {
+        modrinth {
+            projectId = mrId.toString().trim()
+            accessToken = mrToken
+            targetMcVersions.each { ver -> minecraftVersions.add(ver) }
+            if (sub.name == 'fabric') {
+                requires 'fabric-api'
+            }
+        }
+    }
+
+    // CurseForge Configuration
+    if (cfId != null && !cfId.toString().trim().isEmpty()) {
+        curseforge {
+            projectId = cfId.toString().trim()
+            accessToken = cfToken
+            targetMcVersions.each { ver -> minecraftVersions.add(ver) }
+            if (sub.name == 'fabric') {
+                requires 'fabric-api'
+            }
+        }
+    }
+}
+
+// Fail-fast validation when publishMods is explicitly triggered
+tasks.named('publishMods').configure {
+    doFirst {
+        if (!releaseNotesFile.exists() || releaseNotesFile.text.trim().isEmpty()) {
+            throw new GradleException("Cannot publish '${sub.path}': Release notes file is missing or empty!\n" +
+                    "Expected path: ${releaseNotesFile.absolutePath}\n" +
+                    "Please create 'release-notes.md' in 'mods/${modSlug}/' and write your changelog before publishing.")
+        }
+
+        if (!mrId && !cfId) {
+            throw new GradleException("Cannot publish '${sub.path}': No platform configured. Set 'modrinth_id' and/or 'curseforge_id' in 'mods/${modSlug}/gradle.properties'.")
+        }
+
+        if (mrId && !mrToken.isPresent()) {
+            throw new GradleException("Cannot publish '${sub.path}' to Modrinth: 'MODRINTH_TOKEN' is missing from ~/.gradle/gradle.properties.")
+        }
+
+        if (cfId && !cfToken.isPresent()) {
+            throw new GradleException("Cannot publish '${sub.path}' to CurseForge: 'CURSEFORGE_TOKEN' is missing from ~/.gradle/gradle.properties.")
+        }
+    }
+}
