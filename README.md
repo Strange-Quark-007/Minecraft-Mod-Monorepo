@@ -2,6 +2,19 @@
 
 A Gradle project template for developing and maintaining **multiple Minecraft mods** across **multiple modloaders** (Fabric & NeoForge) inside a single monorepo, using source-shared common projects without third-party frameworks or shadow jars.
 
+> **Gradle purists will hate this:**
+> 
+> Purists advocate for strictly declarative builds where every submodule maintains its own isolated `build.gradle`. In a multi-mod monorepo, that means maintaining dozens of identical boilerplate build scripts that quickly drift out of sync.
+> 
+> Instead, this repo uses **centralized dynamic convention injection**:
+> * **The Platform (`gradle/platform.gradle`):**
+>   * Build conventions, Loom, ModDev, toolchains, and packaging are dynamically injected across all enabled mods.
+>   * Individual mod folders don't need a single `build.gradle` — just pure source code and a `gradle.properties`.
+> * **The Publishing (`gradle/publishing.gradle`):**
+>   * Publishing is configured dynamically from mod metadata instead of duplicated per subproject.
+>   * Release notes (`release-notes.md`) stay local and gitignored.
+>   * You get one-click multi-platform releases — with **zero merge conflicts** across parallel Minecraft version branches (`26.1`, `26.2`, `26.3`).
+
 ## Getting Started
 
 ### IntelliJ IDEA
@@ -134,7 +147,7 @@ Supported `environment` values:
 * `client_or_server_prefers_both` - Works on either side, but provides extra features when on both.
 * `singleplayer_only` - Singleplayer only.
 
-### Publishing
+### Releasing a Mod
 
 1. Put the notes for **this specific release** in `mods/<mod>/release-notes.md` (this file is gitignored and meant only for the current update, not a full historical changelog).
 2. Run the publish task:
