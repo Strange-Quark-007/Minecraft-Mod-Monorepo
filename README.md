@@ -106,7 +106,7 @@ All built mod jars follow the `<mod_id>-<mod_version>+<mc_version>-<loader>.jar`
 
 ## Publishing
 
-Publishing to Modrinth and CurseForge uses `me.modmuss50.mod-publish-plugin`.
+Publishing to Modrinth and CurseForge uses [`me.modmuss50.mod-publish-plugin`](https://modmuss50.github.io/mod-publish-plugin/).
 
 ### Setup
 
@@ -120,8 +120,19 @@ Publishing to Modrinth and CurseForge uses `me.modmuss50.mod-publish-plugin`.
    ```properties
    modrinth_id=my-mod
    curseforge_id=123456
-   # release_type=release  # release, beta, or alpha
+   # release_type=release              # release (default), beta, or alpha
+   # environment=both                  # see supported values below
+   # publish_minecraft_versions=       # optional: override target versions (e.g. 26.3, 26.3.1)
    ```
+
+Supported `environment` values:
+* `both` *(default)* - Required on both client & server.
+* `client` / `client_only` - Client only.
+* `server` / `server_only` - Server only.
+* `dedicated_server_only` - Dedicated servers only.
+* `client_or_server` - Works on client alone, server alone, or both.
+* `client_or_server_prefers_both` - Works on either side, but provides extra features when on both.
+* `singleplayer_only` - Singleplayer only.
 
 ### Publishing
 
