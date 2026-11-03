@@ -62,13 +62,8 @@ sub.tasks.withType(Jar).configureEach {
     archiveBaseName.set(sub.ext.mod_id)
     archiveVersion.set(sub.version)
 
-    if (name == 'remapJar') {
+    if (name == 'jar') {
         archiveClassifier.set(sub.name)
-    } else if (name == 'jar') {
-        archiveClassifier.set(sub.provider {
-            def remapJar = sub.tasks.findByName('remapJar')
-            return (remapJar != null && remapJar.enabled) ? "${sub.name}-dev" : sub.name
-        })
     } else if (name == 'sourcesJar') {
         archiveClassifier.set("${sub.name}-sources")
     } else if (name == 'javadocJar') {
@@ -77,7 +72,7 @@ sub.tasks.withType(Jar).configureEach {
 
     def modLicense = modProject.file('LICENSE')
     def licenseFile = modLicense.exists() ? modLicense : rootProject.file('LICENSE')
-    if (licenseFile.exists() && name in ['jar', 'remapJar']) {
+    if (licenseFile.exists() && name == 'jar') {
         from(licenseFile)
     }
 

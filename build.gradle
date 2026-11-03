@@ -2,11 +2,23 @@ plugins {
     id 'base' // Provides standard 'build', 'clean', and 'assemble' lifecycle tasks at root
     id 'net.fabricmc.fabric-loom' version '1.18.1' apply false
     id 'net.neoforged.moddev' version '2.0.147' apply false
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
 subprojects { Project sub ->
     if (sub.name in ['common', 'fabric', 'neoforge']) {
         apply from: "${rootDir}/gradle/platform.gradle"
+    }
+    if (sub.name in ['fabric', 'neoforge']) {
+        apply from: "${rootDir}/gradle/publishing.gradle"
+    }
+    if (sub.parent == rootProject && sub.name != 'common') {
+        // Container mod projects (e.g. :mod-a, :mod-b)
+        sub.tasks.register('publishMods') {
+            group = 'publishing'
+            description = "Publishes all built platform jars (Fabric & NeoForge) for ${sub.name}."
+            dependsOn "${sub.path}:fabric:publishMods", "${sub.path}:neoforge:publishMods"
+        }
     }
 }
 
@@ -31,7 +43,6 @@ tasks.register('collectJars', Sync) {
             include '*.jar'
             exclude '*-sources.jar'
             exclude '*-javadoc.jar'
-            exclude '*-dev.jar'
         }
     }
 }
