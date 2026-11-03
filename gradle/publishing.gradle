@@ -1,6 +1,6 @@
 // ==============================================================================
 // Monorepo Multi-Platform Publishing Convention Script
-// Powered by me.modmuss50.mod-publish-plugin
+// Powered by me.modmuss50.mod-publish-plugin (https://modmuss50.github.io/mod-publish-plugin/)
 // ==============================================================================
 
 apply plugin: 'me.modmuss50.mod-publish-plugin'
@@ -22,6 +22,52 @@ def cfToken = providers.gradleProperty('CURSEFORGE_TOKEN').orElse(providers.envi
 
 def mrId = modProp('modrinth_id')
 def cfId = modProp('curseforge_id')
+
+// Environment / Side Support:
+// Modrinth: CLIENT_ONLY, SERVER_ONLY, DEDICATED_SERVER_ONLY, CLIENT_AND_SERVER, SINGLEPLAYER_ONLY, etc.
+// CurseForge: boolean flags (client, server)
+def envProp = (modProp('environment') ?: 'both').toString().trim().toLowerCase()
+
+def isClientOnly = envProp in ['client', 'client_only', 'singleplayer_only', 'client_only_server_optional']
+def isServerOnly = envProp in ['server', 'server_only', 'dedicated_server_only', 'server_only_client_optional']
+
+def isClient = modProp('client') != null ? modProp('client').toString().toBoolean() : (!isServerOnly)
+def isServer = modProp('server') != null ? modProp('server').toString().toBoolean() : (!isClientOnly)
+
+def mrEnv = null
+
+switch (envProp) {
+    case 'client':
+    case 'client_only':
+        mrEnv = 'CLIENT_ONLY'
+        break
+    case 'server':
+    case 'server_only':
+        mrEnv = 'SERVER_ONLY'
+        break
+    case 'dedicated_server_only':
+        mrEnv = 'DEDICATED_SERVER_ONLY'
+        break
+    case 'both':
+    case 'client_and_server':
+        mrEnv = 'CLIENT_AND_SERVER'
+        break
+    case 'server_only_client_optional':
+        mrEnv = 'SERVER_ONLY_CLIENT_OPTIONAL'
+        break
+    case 'client_only_server_optional':
+        mrEnv = 'CLIENT_ONLY_SERVER_OPTIONAL'
+        break
+    case 'client_or_server_prefers_both':
+        mrEnv = 'CLIENT_OR_SERVER_PREFERS_BOTH'
+        break
+    case 'client_or_server':
+        mrEnv = 'CLIENT_OR_SERVER'
+        break
+    case 'singleplayer_only':
+        mrEnv = 'SINGLEPLAYER_ONLY'
+        break
+}
 
 publishMods {
     // Both Fabric (since 26.1 without intermediary remapping) and NeoForge produce their release jar via 'jar'
@@ -49,6 +95,9 @@ publishMods {
         modrinth {
             projectId = mrId.toString().trim()
             accessToken = mrToken
+            if (mrEnv != null) {
+                environment = mrEnv
+            }
             targetMcVersions.each { ver -> minecraftVersions.add(ver) }
             if (sub.name == 'fabric') {
                 requires 'fabric-api'
@@ -61,6 +110,8 @@ publishMods {
         curseforge {
             projectId = cfId.toString().trim()
             accessToken = cfToken
+            client = isClient
+            server = isServer
             targetMcVersions.each { ver -> minecraftVersions.add(ver) }
             if (sub.name == 'fabric') {
                 requires 'fabric-api'
