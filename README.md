@@ -100,8 +100,39 @@ dependencies {
 * `./gradlew :<mod>:fabric:runClient` - Runs the Fabric client for a specific mod.
 * `./gradlew :<mod>:neoforge:runClient` - Runs the NeoForge client for a specific mod.
 * `./gradlew :<mod>:fabric:build` - Builds only the Fabric jar for a single mod.
+* `./gradlew :<mod>:publishMods` - Builds and publishes both Fabric and NeoForge releases for a specific mod.
 
-All built mod jars follow the `<mod_id>-<mod_version>+<mc_version>-<loader>.jar` naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`) for easy manual testing and uploading to CurseForge or Modrinth.
+All built mod jars follow the `<mod_id>-<mod_version>+<mc_version>-<loader>.jar` naming standard and are surfaced into organized folders in `build/libs/<mod-name>/` (e.g. `build/libs/mod-a/`).
+
+## Publishing
+
+Publishing to Modrinth and CurseForge uses `me.modmuss50.mod-publish-plugin`.
+
+### Setup
+
+1. Add your API tokens to `~/.gradle/gradle.properties`:
+   ```properties
+   MODRINTH_TOKEN=mrp_...
+   CURSEFORGE_TOKEN=...
+   ```
+
+2. Add your project IDs in `mods/<mod>/gradle.properties`:
+   ```properties
+   modrinth_id=my-mod
+   curseforge_id=123456
+   # release_type=release  # release, beta, or alpha
+   ```
+
+### Publishing
+
+1. Put the notes for **this specific release** in `mods/<mod>/release-notes.md` (this file is gitignored and meant only for the current update, not a full historical changelog).
+2. Run the publish task:
+   ```bash
+   ./gradlew :<mod>:publishMods
+   ```
+   Or double-click `publishMods` under `mods/<mod>/Tasks/publishing/` in IntelliJ.
+
+*(Tip: You can test the release without uploading by passing `-PdryRun=true`)*
 
 ## License
 
