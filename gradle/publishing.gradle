@@ -69,6 +69,14 @@ switch (envProp) {
         break
 }
 
+// Resolve publishing dependencies (common + loader-specific)
+def parseDepList = { String key ->
+    (modProp(key) ?: '').toString().split(',').collect { it.trim() }.findAll { !it.isEmpty() }
+}
+
+def allPublishRequires = (parseDepList('publish_requires') + parseDepList("${sub.name}_publish_requires")).unique()
+def allPublishOptional = (parseDepList('publish_optional') + parseDepList("${sub.name}_publish_optional")).unique()
+
 publishMods {
     // Both Fabric (since 26.1 without intermediary remapping) and NeoForge produce their release jar via 'jar'
     file = tasks.named('jar').flatMap { it.archiveFile }
@@ -87,6 +95,9 @@ publishMods {
     // Release channel
     type = releaseTypeProp == 'alpha' ? ALPHA : (releaseTypeProp == 'beta' ? BETA : STABLE)
     modLoaders.add(sub.name)
+    if (sub.name == 'fabric') {
+        modLoaders.add('quilt')
+    }
     displayName = "${sub.ext.mod_name} ${sub.version} [${sub.name.capitalize()}]"
     version = sub.version
 
@@ -102,6 +113,8 @@ publishMods {
             if (sub.name == 'fabric') {
                 requires 'fabric-api'
             }
+            allPublishRequires.each { dep -> if (dep != 'fabric-api') requires dep }
+            allPublishOptional.each { dep -> optional dep }
         }
     }
 
@@ -116,6 +129,8 @@ publishMods {
             if (sub.name == 'fabric') {
                 requires 'fabric-api'
             }
+            allPublishRequires.each { dep -> if (dep != 'fabric-api') requires dep }
+            allPublishOptional.each { dep -> optional dep }
         }
     }
 }
