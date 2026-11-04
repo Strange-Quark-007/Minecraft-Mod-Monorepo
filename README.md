@@ -136,6 +136,9 @@ Publishing to Modrinth and CurseForge uses [`me.modmuss50.mod-publish-plugin`](h
    # release_type=release              # release (default), beta, or alpha
    # environment=both                  # see supported values below
    # publish_minecraft_versions=       # optional: override target versions (e.g. 26.3, 26.3.1)
+   # publish_requires=                 # optional: required dependencies across platforms (e.g. cloth-config)
+   # fabric_publish_optional=          # optional: Fabric-only dependencies (e.g. modmenu)
+   # neoforge_publish_optional=        # optional: NeoForge-only dependencies
    ```
 
 Supported `environment` values:
