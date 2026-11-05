@@ -15,6 +15,20 @@ A Gradle project template for developing and maintaining **multiple Minecraft mo
 >   * Release notes (`release-notes.md`) stay local and gitignored.
 >   * You get one-click multi-platform releases — with **zero merge conflicts** across parallel Minecraft version branches (`26.1`, `26.2`, `26.3`).
 
+## Table of Contents
+
+- [Getting Started](#getting-started)
+- [Monorepo Structure](#monorepo-structure)
+- [Adding and Removing Mods](#adding-and-removing-mods)
+  - [Adding a Mod](#adding-a-mod)
+  - [Purging Demo Mods](#purging-demo-mods)
+  - [Disabling a Mod](#disabling-a-mod)
+- [Development Guide](#development-guide)
+- [Adding Dependencies](#adding-dependencies)
+- [Common Gradle Tasks](#common-gradle-tasks)
+- [Publishing](#publishing)
+- [License](#license)
+
 ## Getting Started
 
 ### IntelliJ IDEA
