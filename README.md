@@ -52,26 +52,45 @@ Build conventions for all mods and loaders are managed centrally in `gradle/plat
 
 ### Adding a Mod
 
-1. Open `settings.gradle` and add your mod's folder name to the `enabledMods` list:
-   ```groovy
-   def enabledMods = ['mod-a', 'mod-b', 'my-new-mod']
-   ```
-2. Create `mods/my-new-mod/` (you can copy `mods/mod-a` as a template), then rename the placeholder `com.example.moda` packages in its `common`, `fabric`, and `neoforge` sources to your own package.
-3. Set your mod's identity in `mods/my-new-mod/gradle.properties`:
-   ```properties
-   mod_id=my_new_mod
-   mod_name=My New Mod
-   version=1.0.0
-   group=com.example.mynewmod
-   mod_author=Strange Quark
-   description=A brand new mod in the monorepo.
-   license=MIT
-   ```
-4. Reload Gradle in IntelliJ.
+Run `createMod` with your mod name:
 
-### Removing or Disabling a Mod
+```bash
+# Basic usage (inherits root properties)
+./gradlew createMod -Pname=my-new-mod
 
-Remove or comment out the mod name from `enabledMods` in `settings.gradle`. The folder can remain on disk without being evaluated or built by Gradle.
+# With a custom group / namespace
+./gradlew createMod -Pname=my-new-mod -Pgroup=dev.strangequark.mymod
+
+# Interactive prompt (prompts in terminal for name and package)
+./gradlew createMod
+```
+
+**Defaults:** If flags are not provided, values are taken directly from root `gradle.properties`:
+* `group`: `<root_group>.<mod_name>` (e.g. `com.example.mynewmod`)
+* `mod_author`, `license`, and `version`: inherited directly from the root properties file.
+
+This extracts `gradle/template.zip` into `mods/<name>/`, renames packages, classes, mixin configs, service loaders, and mod metadata (`fabric.mod.json`, `neoforge.mods.toml`), and adds the mod to `enabledMods` in `settings.gradle`.
+
+### Purging Demo Mods
+
+To remove the starter demo mods (`mod-a` and `mod-b`):
+
+```bash
+./gradlew purgeTemplates
+```
+
+This removes `mods/mod-a/` and `mods/mod-b/` and unregisters them from `settings.gradle`.
+
+### Disabling a Mod
+
+Remove or comment out the mod name from `enabledMods` in `settings.gradle`. The mod directory can remain on disk but is ignored by Gradle:
+
+```groovy
+def enabledMods = [
+    // 'my-new-mod'
+]
+```
+
 
 ## Development Guide
 
@@ -108,6 +127,8 @@ dependencies {
 
 ## Common Gradle Tasks
 
+* `./gradlew createMod -Pname=<name>` - Generates a new mod from `gradle/template.zip` and registers it in `settings.gradle`.
+* `./gradlew purgeTemplates` - Deletes demo starter mods (`mod-a`, `mod-b`) and unregisters them from `settings.gradle`.
 * `./gradlew build` - Compiles all active mods and collects their final jars into `build/libs/<mod>/`.
 * `./gradlew clean` - Deletes build directories across all mods and the root project.
 * `./gradlew :<mod>:fabric:runClient` - Runs the Fabric client for a specific mod.

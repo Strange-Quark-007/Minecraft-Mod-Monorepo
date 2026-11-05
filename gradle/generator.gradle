@@ -1,0 +1,228 @@
+import java.util.zip.ZipFile
+import java.util.zip.ZipEntry
+
+// ==============================================================================
+// Monorepo Mod Generator & Template Tasks
+// ==============================================================================
+
+tasks.register('createMod') {
+    group = 'development'
+    description = 'Spins up a brand new mod in mods/<name>/ from gradle/template.zip.'
+
+    doLast {
+        def cliProps = gradle.startParameter.projectProperties
+        def rawName = (cliProps['name'] ?: cliProps['modName'] ?: cliProps['mod'] ?: cliProps['modId'] ?: cliProps['mod_id'] ?: cliProps['mod_name'] ?: '').replaceAll(/^['"]|['"]$/, '').trim()
+
+        // Support interactive input when run in an interactive terminal without flags
+        def console = System.console()
+        def interactive = false
+        if (rawName.isEmpty() && console != null) {
+            interactive = true
+            print "Mod name (e.g. my-new-mod): "
+            def input = console.readLine()
+            if (input != null && !input.trim().isEmpty()) {
+                rawName = input.trim()
+            }
+        }
+
+        if (!rawName || rawName.isEmpty()) {
+            throw new GradleException(
+                "Mod name is required.\n" +
+                "Usage: ./gradlew createMod -Pname=<mod-name> [-Pgroup=<custom.group>]\n" +
+                "Example: ./gradlew createMod -Pname=my-new-mod -Pgroup=dev.strangequark.mymod"
+            )
+        }
+
+        // Slug used for directory name and settings.gradle include (e.g. 'magic-wand')
+        def modSlug = rawName.replaceAll(/[^a-zA-Z0-9_-]/, '-').toLowerCase()
+        if (modSlug.isEmpty()) {
+            throw new GradleException("Invalid mod name '${rawName}'.")
+        }
+
+        def targetDir = rootProject.file("mods/${modSlug}")
+        if (targetDir.exists()) {
+            throw new GradleException("Mod folder already exists at '${targetDir.path}'. Choose a different name or remove the existing folder.")
+        }
+
+        def templateZip = rootProject.file("gradle/template.zip")
+        if (!templateZip.exists()) {
+            throw new GradleException("Template blueprint archive not found at '${templateZip.path}'.")
+        }
+
+        // Mod ID: snake_case (e.g. 'magic_wand')
+        def modId = (cliProps['mod_id'] ?: cliProps['modId'] ?: modSlug.replace('-', '_')).replaceAll(/^['"]|['"]$/, '').trim()
+
+        // Display Name: Title Case (e.g. 'Magic Wand')
+        def modDisplayName = (cliProps['mod_name'] ?: cliProps['displayName'] ?: modSlug.split('[-_]+').findAll { it }.collect { it.capitalize() }.join(' ')).replaceAll(/^['"]|['"]$/, '').trim()
+
+        // Main Class Name: PascalCase (e.g. 'MagicWand')
+        def mainClassName = (cliProps['mainClass'] ?: modSlug.split('[^a-zA-Z0-9]+').findAll { it }.collect { it.capitalize() }.join('')).replaceAll(/^['"]|['"]$/, '').trim()
+        if (mainClassName =~ /^[0-9]/) {
+            mainClassName = "Mod" + mainClassName
+        }
+
+        // Namespace / Package
+        def rootGroup = (rootProject.findProperty('group') ?: 'com.example').toString().trim()
+        def pkgSuffix = modSlug.replaceAll(/[^a-z0-9]/, '')
+        def defaultGroup = "${rootGroup}.${pkgSuffix}"
+
+        def customGroup = cliProps['group']
+        if (customGroup == null && interactive && console != null) {
+            print "Package group [default: ${defaultGroup}]: "
+            def groupInput = console.readLine()
+            if (groupInput != null && !groupInput.trim().isEmpty()) {
+                customGroup = groupInput.trim()
+            }
+        }
+        def targetGroup = (customGroup ?: defaultGroup).replaceAll(/^['"]|['"]$/, '').trim()
+
+        // Root properties
+        def author = (cliProps['mod_author'] ?: rootProject.findProperty('mod_author') ?: 'Strange Quark').toString().replaceAll(/^['"]|['"]$/, '').trim()
+        def license = (cliProps['license'] ?: rootProject.findProperty('license') ?: 'MIT').toString().replaceAll(/^['"]|['"]$/, '').trim()
+        def modVer = (cliProps['mod_version'] ?: cliProps['version'] ?: rootProject.findProperty('version') ?: '1.0.0').toString().replaceAll(/^['"]|['"]$/, '').trim()
+        def desc = (cliProps['description'] ?: "${modDisplayName} mod in the monorepo.").toString().replaceAll(/^['"]|['"]$/, '').trim()
+
+        // Baseline template tokens
+        def templateGroup = "com.example.template"
+        def templateGroupPath = templateGroup.replace('.', '/')
+        def targetGroupPath = targetGroup.replace('.', '/')
+        def templateMainClass = "TemplateMod"
+        def templateModId = "template"
+        def templateModName = "Template Mod"
+
+        logger.lifecycle("==================================================")
+        logger.lifecycle(" Creating Mod: ${modDisplayName}")
+        logger.lifecycle("   Directory:  mods/${modSlug}/")
+        logger.lifecycle("   Mod ID:     ${modId}")
+        logger.lifecycle("   Package:    ${targetGroup}")
+        logger.lifecycle("   Main Class: ${mainClassName}")
+        logger.lifecycle("   Version:    ${modVer}")
+        logger.lifecycle("   Author:     ${author}")
+        logger.lifecycle("   License:    ${license}")
+        logger.lifecycle("==================================================")
+
+        // Extract and transform blueprint files
+        def zip = new ZipFile(templateZip)
+        try {
+            zip.entries().each { ZipEntry entry ->
+                if (entry.isDirectory()) return
+
+                def entryName = entry.name.replace('\\', '/')
+                def destName = entryName
+
+                // 1. Rename Java package path
+                if (destName.contains(templateGroupPath)) {
+                    destName = destName.replace(templateGroupPath, targetGroupPath)
+                }
+
+                // 2. Rename main class file
+                if (destName.endsWith("${templateMainClass}.java")) {
+                    destName = destName.substring(0, destName.length() - "${templateMainClass}.java".length()) + "${mainClassName}.java"
+                }
+
+                // 3. Rename Mixin JSON configs
+                if (destName.endsWith("template.mixins.json")) {
+                    destName = destName.replace("template.mixins.json", "${modId}.mixins.json")
+                } else if (destName.endsWith("template.fabric.mixins.json")) {
+                    destName = destName.replace("template.fabric.mixins.json", "${modId}.fabric.mixins.json")
+                } else if (destName.endsWith("template.neoforge.mixins.json")) {
+                    destName = destName.replace("template.neoforge.mixins.json", "${modId}.neoforge.mixins.json")
+                }
+
+                // 4. Rename ServiceLoader descriptor file
+                if (destName.contains("META-INF/services/${templateGroup}")) {
+                    destName = destName.replace("META-INF/services/${templateGroup}", "META-INF/services/${targetGroup}")
+                }
+
+                def destFile = new File(targetDir, destName)
+                destFile.parentFile.mkdirs()
+
+                def content = zip.getInputStream(entry).getText('UTF-8')
+
+                if (entryName == 'gradle.properties') {
+                    content = content.replace("mod_id=template", "mod_id=${modId}")
+                    content = content.replace("mod_name=Template Mod", "mod_name=${modDisplayName}")
+                    content = content.replace("version=1.0.0", "version=${modVer}")
+                    content = content.replace("group=com.example.template", "group=${targetGroup}")
+                    content = content.replace("mod_author=Strange Quark", "mod_author=${author}")
+                    content = content.replace("description=A modular mod component in the monorepo.", "description=${desc}")
+                    content = content.replace("license=MIT", "license=${license}")
+                } else {
+                    // Package & import replacements
+                    content = content.replace(templateGroup, targetGroup)
+                    // Main class replacements (class name, constructor, entrypoints)
+                    content = content.replace(templateMainClass, mainClassName)
+                    // Mod ID in Constants.MOD_ID
+                    content = content.replace("\"" + templateModId + "\"", "\"" + modId + "\"")
+                    // Mod display name in Constants.MOD_NAME
+                    content = content.replace("\"" + templateModName + "\"", "\"" + modDisplayName + "\"")
+                }
+
+                destFile.write(content, 'UTF-8')
+            }
+        } finally {
+            zip.close()
+        }
+
+        // Register in settings.gradle
+        def settingsFile = rootProject.file('settings.gradle')
+        if (settingsFile.exists()) {
+            def settingsText = settingsFile.getText('UTF-8')
+            def matcher = (settingsText =~ /def\s+enabledMods\s*=\s*\[([^\]]*)\]/)
+            if (matcher.find()) {
+                def rawList = matcher.group(1).trim()
+                def list = rawList.isEmpty() ? [] : rawList.split(',').collect { it.trim().replaceAll(/^['"]|['"]$/, '') }.findAll { !it.isEmpty() }
+                if (!list.contains(modSlug)) {
+                    list.add(modSlug)
+                    def formatted = list.collect { "'${it}'" }.join(', ')
+                    def updated = settingsText.substring(0, matcher.start()) + "def enabledMods = [${formatted}]" + settingsText.substring(matcher.end())
+                    settingsFile.write(updated, 'UTF-8')
+                    logger.lifecycle("Registered '${modSlug}' in settings.gradle.")
+                } else {
+                    logger.lifecycle("'${modSlug}' is already registered in settings.gradle.")
+                }
+            } else {
+                logger.warn("Could not find enabledMods list in settings.gradle to automatically register '${modSlug}'.")
+            }
+        }
+
+        logger.lifecycle("Mod '${modSlug}' created successfully at mods/${modSlug}/.")
+    }
+}
+
+tasks.register('purgeTemplates') {
+    group = 'development'
+    description = 'Wipes dummy demo mods (mods/mod-a and mods/mod-b) and removes them from settings.gradle.'
+
+    doLast {
+        def demoMods = ['mod-a', 'mod-b']
+        demoMods.each { modName ->
+            def modDir = rootProject.file("mods/${modName}")
+            if (modDir.exists()) {
+                project.delete(modDir)
+                logger.lifecycle("Deleted mods/${modName}/")
+            } else {
+                logger.lifecycle("mods/${modName}/ does not exist, skipping.")
+            }
+        }
+
+        def settingsFile = rootProject.file('settings.gradle')
+        if (settingsFile.exists()) {
+            def settingsText = settingsFile.getText('UTF-8')
+            def matcher = (settingsText =~ /def\s+enabledMods\s*=\s*\[([^\]]*)\]/)
+            if (matcher.find()) {
+                def rawList = matcher.group(1).trim()
+                def list = rawList.isEmpty() ? [] : rawList.split(',').collect { it.trim().replaceAll(/^['"]|['"]$/, '') }.findAll { !it.isEmpty() }
+                def modified = list.removeAll { demoMods.contains(it) }
+                if (modified || list.any { demoMods.contains(it) }) {
+                    def formatted = list.collect { "'${it}'" }.join(', ')
+                    def updated = settingsText.substring(0, matcher.start()) + "def enabledMods = [${formatted}]" + settingsText.substring(matcher.end())
+                    settingsFile.write(updated, 'UTF-8')
+                    logger.lifecycle("Removed demo mods ${demoMods} from settings.gradle.")
+                }
+            }
+        }
+
+        logger.lifecycle("Demo templates purged successfully.")
+    }
+}
