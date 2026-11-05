@@ -5,6 +5,8 @@ plugins {
     id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
+apply from: "${rootDir}/gradle/generator.gradle"
+
 subprojects { Project sub ->
     if (sub.name in ['common', 'fabric', 'neoforge']) {
         apply from: "${rootDir}/gradle/platform.gradle"
