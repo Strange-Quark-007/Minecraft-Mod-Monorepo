@@ -1,8 +1,8 @@
 plugins {
     id 'base' // Provides standard 'build', 'clean', and 'assemble' lifecycle tasks at root
-    id 'net.fabricmc.fabric-loom' version '1.18.1' apply false
-    id 'net.neoforged.moddev' version '2.0.147' apply false
-    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
+    id 'net.fabricmc.fabric-loom' version "${fabric_loom_version}" apply false
+    id 'net.neoforged.moddev' version "${moddev_gradle_version}" apply false
+    id 'me.modmuss50.mod-publish-plugin' version "${mod_publish_version}" apply false
 }
 
 apply from: "${rootDir}/gradle/generator.gradle"
@@ -57,4 +57,15 @@ tasks.named('build') {
 // Hook recursive clean into root's standard lifecycle clean task
 tasks.named('clean') {
     dependsOn subprojects.findAll { it.name in ['common', 'fabric', 'neoforge'] }.collect { "${it.path}:clean" }
+}
+
+// -----------------------------------------------------------------------------
+// Shared ModDevGradle Artifact Store
+// -----------------------------------------------------------------------------
+
+tasks.register('cleanModDevCache', Delete) {
+    group = 'moddev cache'
+    description = 'Deletes the shared ModDevGradle artifact store.'
+
+    delete rootProject.file((rootProject.findProperty('moddev_artifact_store') ?: '.gradle/moddev-artifacts').toString())
 }
