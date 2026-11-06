@@ -1,0 +1,232 @@
+import java.nio.file.AccessDeniedException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.UUID
+
+// ==============================================================================
+// Shared ModDevGradle Artifact Store
+// ------------------------------------------------------------------------------
+// MDG writes Minecraft jars into <project>/build/moddev/artifacts. 
+// In a monorepo every mod produces the same jars, and
+// hence that directory is duplicated per mod.
+//
+// This script links those jars into one store under the root project, 
+// keyed by the exact artifact set (platform, MC/NeoForge version, MDG version, AT hash).
+// Identical files become NTFS/ext4/APFS hardlinks, so only one physical copy
+// exists on disk while every mod keeps a normal-looking file in its build dir.
+//
+// Applied from gradle/platform.gradle. Expects:
+//   ext.modDevCacheKind    = 'common' | 'neoforge'
+//   ext.modDevCacheVersion = neo_form_version | neoforge_version
+// ==============================================================================
+
+def cacheProject = project
+def modProject = cacheProject.parent
+def kind = cacheProject.ext.modDevCacheKind
+def artifactVersion = cacheProject.ext.modDevCacheVersion
+
+def schemaVersion = (rootProject.findProperty('moddev_cache_schema') ?: '1').toString()
+def mdgVersion = (rootProject.findProperty('moddev_gradle_version') ?: 'unknown').toString()
+def storeRoot = rootProject.file((rootProject.findProperty('moddev_artifact_store') ?: '.gradle/moddev-artifacts').toString())
+
+// Everything that can alter the produced Minecraft jars must be part of the key.
+// The two candidates are the same file when cacheProject is common.
+def atFiles = [
+        new File(modProject.projectDir, 'common/src/main/resources/META-INF/accesstransformer.cfg'),
+        new File(cacheProject.projectDir, 'src/main/resources/META-INF/accesstransformer.cfg')
+].findAll { it.isFile() }.unique { it.canonicalPath }
+
+def sha256 = { File file ->
+    def digest = MessageDigest.getInstance('SHA-256')
+    file.withInputStream { input ->
+        byte[] buffer = new byte[1 << 16]
+        int read
+        while ((read = input.read(buffer)) > 0) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { String.format('%02x', it & 0xff) }.join()
+}
+
+def atDigest = MessageDigest.getInstance('SHA-256')
+atFiles.sort { it.absolutePath }.each { File at ->
+    atDigest.update(at.name.getBytes('UTF-8'))
+    atDigest.update(Files.readAllBytes(at.toPath()))
+}
+def atHash = atDigest.digest().collect { String.format('%02x', it & 0xff) }.join().substring(0, 12)
+
+def sanitize = { String value -> value.replaceAll(/[^A-Za-z0-9._-]/, '_') }
+def setKey = sanitize("${kind}-${artifactVersion}-mdg${mdgVersion}-schema${schemaVersion}-at${atHash}")
+def setStore = new File(storeRoot, setKey)
+def artifactsDir = cacheProject.layout.buildDirectory.dir('moddev/artifacts').get().asFile
+def expectedPrefix = kind == 'common' ? "vanilla-${artifactVersion}" : "minecraft-patched-${artifactVersion}"
+
+def isManagedArtifact = { File file ->
+    file.isFile() && file.name.endsWith('.jar') &&
+            (file.name.startsWith('vanilla-') || file.name.startsWith('minecraft-patched-'))
+}
+
+def deleteWithRetry = { File file ->
+    for (int attempt = 0; attempt < 5; attempt++) {
+        try {
+            Files.deleteIfExists(file.toPath())
+            return
+        } catch (IOException e) {
+            if (attempt == 4) {
+                throw e
+            }
+            Thread.sleep(100)
+        }
+    }
+}
+
+// Creates a hardlink, or a copy when the filesystem cannot link (exFAT, FAT32,
+// some network shares). The new file is built under a unique temporary name and
+// renamed into place, so parallel projects never observe a half-written file.
+def linkOrCopy = { File linkFile, File targetFile, def taskLogger ->
+    Path directory = linkFile.parentFile.toPath()
+    Files.createDirectories(directory)
+    if (Files.exists(linkFile.toPath())) {
+        return false
+    }
+
+    Path temp = directory.resolve(".moddev-${UUID.randomUUID()}.tmp")
+    try {
+        boolean linked = false
+        try {
+            Files.createLink(temp, targetFile.toPath())
+            linked = true
+        } catch (Exception e) {
+            taskLogger.warn("[moddev-cache] Hardlink unavailable for ${linkFile.name}; copying instead. ${e.message}")
+        }
+        if (!linked) {
+            Files.copy(targetFile.toPath(), temp, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
+        }
+
+        for (int attempt = 0; attempt < 10; attempt++) {
+            try {
+                if (Files.exists(linkFile.toPath())) {
+                    return false
+                }
+                Files.move(temp, linkFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                return true
+            } catch (FileAlreadyExistsException ignored) {
+                return false
+            } catch (AtomicMoveNotSupportedException ignored) {
+                try {
+                    Files.move(temp, linkFile.toPath())
+                    return true
+                } catch (FileAlreadyExistsException alsoIgnored) {
+                    return false
+                }
+            } catch (AccessDeniedException e) {
+                // Windows may briefly lock a file another project is reading.
+                if (attempt == 9) {
+                    throw e
+                }
+                Thread.sleep(100)
+            }
+        }
+        return false
+    } finally {
+        Files.deleteIfExists(temp)
+    }
+}
+
+// Pre-restoring is safe: NFRT checks the SHA-1 of the destination first and
+// skips writing when it matches. When it does write, it copies to a temporary
+// file and atomically moves it over the destination, which replaces the
+// directory entry and leaves the store's inode untouched.
+def restoreTask = cacheProject.tasks.register('restoreModDevArtifacts') {
+    group = 'moddev cache'
+    description = "Prunes stale ModDevGradle artifacts and restores current ones from ${setStore}."
+    outputs.upToDateWhen { false }
+
+    doLast {
+        // Drop artifacts from older Minecraft/NeoForge versions. They stay in the
+        // store (one shared copy), so nothing is regenerated unnecessarily.
+        if (artifactsDir.isDirectory()) {
+            artifactsDir.listFiles()?.each { File file ->
+                if (isManagedArtifact(file) && !file.name.startsWith(expectedPrefix)) {
+                    logger.info("[moddev-cache] Pruning stale artifact ${file.name}")
+                    deleteWithRetry(file)
+                }
+            }
+        }
+
+        if (!setStore.isDirectory()) {
+            return
+        }
+
+        Files.createDirectories(artifactsDir.toPath())
+        setStore.listFiles()?.sort { it.name }?.each { File stored ->
+            if (!stored.isFile() || !stored.name.startsWith(expectedPrefix)) {
+                return
+            }
+            File destination = new File(artifactsDir, stored.name)
+            if (!destination.exists()) {
+                linkOrCopy(destination, stored, logger)
+            }
+        }
+    }
+}
+
+def linkTask = cacheProject.tasks.register('linkModDevArtifacts') {
+    group = 'moddev cache'
+    description = "Links this project's ModDevGradle artifacts into the shared store at ${setStore}."
+    dependsOn 'createMinecraftArtifacts'
+    outputs.upToDateWhen { false }
+
+    doLast {
+        if (!artifactsDir.isDirectory()) {
+            return
+        }
+        List<File> artifacts = artifactsDir.listFiles()
+                ?.findAll { isManagedArtifact(it) && it.name.startsWith(expectedPrefix) }
+                ?.sort { it.name } ?: []
+        if (artifacts.isEmpty()) {
+            return
+        }
+
+        Files.createDirectories(setStore.toPath())
+        artifacts.each { File source ->
+            File stored = new File(setStore, source.name)
+            if (!stored.exists()) {
+                linkOrCopy(stored, source, logger)
+            }
+            if (!stored.exists()) {
+                return
+            }
+            if (Files.isSameFile(source.toPath(), stored.toPath())) {
+                return
+            }
+            // Same key and name must mean same bytes. If not, fail loudly instead
+            // of silently serving a wrong Minecraft jar to another mod.
+            if (source.length() != stored.length() || sha256(source) != sha256(stored)) {
+                throw new GradleException(
+                        "[moddev-cache] Store collision for '${source.name}' in ${setStore}.\n" +
+                                "Delete that store directory, or bump 'moddev_cache_schema' in gradle.properties."
+                )
+            }
+            deleteWithRetry(source)
+            linkOrCopy(source, stored, logger)
+        }
+    }
+}
+
+cacheProject.tasks.matching { it.name == 'createMinecraftArtifacts' }.configureEach {
+    dependsOn restoreTask
+    // Guarantees linking even when only the artifact task is invoked directly
+    // (CI, `./gradlew createMinecraftArtifacts`, custom task graphs).
+    finalizedBy linkTask
+}
+cacheProject.tasks.matching { it.name == 'compileJava' }.configureEach {
+    dependsOn linkTask
+}
+cacheProject.tasks.matching { it.name == 'neoForgeIdeSync' }.configureEach {
+    dependsOn linkTask
+}

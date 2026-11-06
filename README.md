@@ -24,6 +24,7 @@ A Gradle project template for developing and maintaining **multiple Minecraft mo
   - [Purging Demo Mods](#purging-demo-mods)
   - [Disabling a Mod](#disabling-a-mod)
 - [Development Guide](#development-guide)
+- [Shared ModDev Artifact Store & Deduplication](#shared-moddev-artifact-store--deduplication)
 - [Adding Dependencies](#adding-dependencies)
 - [Common Gradle Tasks](#common-gradle-tasks)
 - [Publishing](#publishing)
@@ -112,6 +113,36 @@ def enabledMods = [
 * **Loader Subprojects:** The `fabric` and `neoforge` projects load the common code and define platform-specific implementations. They have access to all common code, but common code cannot directly access loader code.
 * **Platform Abstraction:** To call platform-specific logic from common code, use the included `IPlatformHelper` interface via Java's `ServiceLoader` (`Services.PLATFORM`).
 
+## Shared ModDev Artifact Store & Deduplication
+
+NeoForge's ModDevGradle (`net.neoforged.moddev`) decompiles and patches Minecraft into local jars inside each mod (`mods/<mod>/common/build/moddev/artifacts/` and `mods/<mod>/neoforge/build/moddev/artifacts/`). Across multiple mods, this duplicates ~200 MB of identical jars (`vanilla-*.jar`, `minecraft-patched-*.jar`) per mod.
+
+This monorepo automatically eliminates disk bloat using filesystem **hardlinks** via `gradle/moddev-cache.gradle`:
+
+* **Single Physical Copy on Disk:** Jars across all mods share identical disk blocks via NTFS/ext4/APFS hardlinks pointing to a shared store in `.gradle/moddev-artifacts/`. Each mod maintains a normal-looking file in its `build/` directory without altering task or IDE behavior.
+* **Access Transformer (AT) Isolation:** Cache keys incorporate a SHA-256 hash of all active `accesstransformer.cfg` files. Mods using differing ATs are cached independently and will never collide.
+* **Instant Rebuilds After Clean:** Because `.gradle/moddev-artifacts/` persists across `./gradlew clean`, running a clean build on any mod instantly restores hardlinks from the shared store instead of re-running lengthy decompilation.
+* **Parallel & Concurrency Safe:** Supports `org.gradle.parallel=true` and multi-process/CI runs through atomic staging (`.moddev-<uuid>.tmp` + atomic rename) with Windows retry handling.
+* **Graceful Fallback:** If run on filesystems that do not support hardlinks (e.g. FAT32, exFAT, network shares), it automatically falls back to standard copies.
+
+### Cache Management Tasks
+
+* **Purge the shared store:**
+  ```bash
+  ./gradlew cleanModDevCache
+  ```
+  Deletes the shared artifact store when you want a fresh decompile from upstream.
+
+### Configuration (`gradle.properties`)
+
+```properties
+# Shared store location (relative to root or absolute; must be on the same volume/drive)
+moddev_artifact_store=.gradle/moddev-artifacts
+
+# Increment to bust and invalidate all cached artifact sets repo-wide
+moddev_cache_schema=1
+```
+
 ## Adding Dependencies
 
 ### 1. Simple Java Dependencies (via `gradle.properties`)
@@ -145,6 +176,7 @@ dependencies {
 * `./gradlew purgeTemplates` - Deletes demo starter mods (`mod-a`, `mod-b`) and unregisters them from `settings.gradle`.
 * `./gradlew build` - Compiles all active mods and collects their final jars into `build/libs/<mod>/`.
 * `./gradlew clean` - Deletes build directories across all mods and the root project.
+* `./gradlew cleanModDevCache` - Deletes the shared ModDevGradle artifact store.
 * `./gradlew :<mod>:fabric:runClient` - Runs the Fabric client for a specific mod.
 * `./gradlew :<mod>:neoforge:runClient` - Runs the NeoForge client for a specific mod.
 * `./gradlew :<mod>:fabric:build` - Builds only the Fabric jar for a single mod.
