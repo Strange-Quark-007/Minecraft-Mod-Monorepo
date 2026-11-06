@@ -145,6 +145,11 @@ sub.processResources {
 if (sub.name == 'common') {
     sub.apply plugin: 'net.neoforged.moddev'
 
+    // Share MDG Minecraft artifacts across all mods via root .gradle store
+    sub.ext.modDevCacheKind = 'common'
+    sub.ext.modDevCacheVersion = modProp('neo_form_version')
+    apply from: "${rootDir}/gradle/moddev-cache.gradle"
+
     sub.neoForge {
         neoFormVersion = modProp('neo_form_version')
         def at = sub.file('src/main/resources/META-INF/accesstransformer.cfg')
@@ -253,6 +258,11 @@ if (sub.name == 'fabric') {
 // -----------------------------------------------------------------------------
 if (sub.name == 'neoforge') {
     sub.apply plugin: 'net.neoforged.moddev'
+
+    // Share MDG Minecraft artifacts across all mods via root .gradle store
+    sub.ext.modDevCacheKind = 'neoforge'
+    sub.ext.modDevCacheVersion = modProp('neoforge_version')
+    apply from: "${rootDir}/gradle/moddev-cache.gradle"
 
     sub.extensions.configure('neoForge') { neoForge ->
         neoForge.version = modProp('neoforge_version')
