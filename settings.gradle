@@ -45,8 +45,11 @@ enabledMods.each { String modName ->
     project(":${modName}").projectDir = file("mods/${modName}")
 
     loaders.each { String loader ->
-        def subPath = ":${modName}:${loader}"
-        include subPath
-        project(subPath).projectDir = file("mods/${modName}/${loader}")
+        def loaderDir = file("mods/${modName}/${loader}")
+        if (loaderDir.isDirectory()) {
+            def subPath = ":${modName}:${loader}"
+            include subPath
+            project(subPath).projectDir = loaderDir
+        }
     }
 }
