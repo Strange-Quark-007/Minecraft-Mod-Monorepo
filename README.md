@@ -23,6 +23,7 @@ A Gradle project template for developing and maintaining **multiple Minecraft mo
   - [Adding a Mod](#adding-a-mod)
   - [Purging Demo Mods](#purging-demo-mods)
   - [Disabling a Mod](#disabling-a-mod)
+  - [Targeting a Single Loader](#targeting-a-single-loader)
 - [Development Guide](#development-guide)
 - [Shared ModDev Artifact Store & Deduplication](#shared-moddev-artifact-store--deduplication)
 - [Adding Dependencies](#adding-dependencies)
@@ -75,9 +76,6 @@ Run `createMod` with your mod name:
 
 # With a custom group / namespace
 ./gradlew createMod -Pname=my-new-mod -Pgroup=dev.strangequark.mymod
-
-# Interactive prompt (prompts in terminal for name and package)
-./gradlew createMod
 ```
 
 **Defaults:** If flags are not provided, values are taken directly from root `gradle.properties`:
@@ -106,6 +104,17 @@ def enabledMods = [
 ]
 ```
 
+### Targeting a Single Loader
+
+Every mod generated from the template includes `common`, `fabric`, and `neoforge` by default.
+Loader subprojects are registered dynamically, so you can drop a platform:
+
+* **Fabric-only:** delete `mods/<mod>/neoforge/`.
+* **NeoForge-only:** delete `mods/<mod>/fabric/`.
+
+No build script or `settings.gradle` edit is required. Gradle detects the existing loader directories and limits run configurations, `build`, `collectJars`, and `publishMods` to them.
+
+> **`common` is optional but recommended.** Generated loader projects reference shared code, assets, and mixins located in `common`. If you want to delete `common`, make sure you move those files into the loader specific folder. Gradle wiring will adapt automatically.
 
 ## Development Guide
 

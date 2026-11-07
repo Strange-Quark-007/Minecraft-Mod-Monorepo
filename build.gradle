@@ -18,8 +18,10 @@ subprojects { Project sub ->
         // Container mod projects (e.g. :mod-a, :mod-b)
         sub.tasks.register('publishMods') {
             group = 'publishing'
-            description = "Publishes all built platform jars (Fabric & NeoForge) for ${sub.name}."
-            dependsOn "${sub.path}:fabric:publishMods", "${sub.path}:neoforge:publishMods"
+            description = "Publishes all built platform jars for ${sub.name}."
+            dependsOn sub.childProjects.values()
+                    .findAll { it.name in ['fabric', 'neoforge'] }
+                    .collect { "${it.path}:publishMods" }
         }
     }
 }

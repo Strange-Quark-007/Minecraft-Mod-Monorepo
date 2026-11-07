@@ -10,6 +10,7 @@ import org.gradle.jvm.tasks.Jar
 def sub = project
 def modProject = sub.parent
 def modSlug = modProject.name
+def commonProject = modProject.findProject('common')
 
 // Resolve property from mod overrides first, then root defaults
 def modProp = { String key -> modProject.findProperty(key) ?: rootProject.findProperty(key) }
@@ -179,13 +180,13 @@ if (sub.name == 'common') {
 // -----------------------------------------------------------------------------
 // 4. LOADER PLATFORMS (Fabric & NeoForge - consuming Common sources)
 // -----------------------------------------------------------------------------
-if (sub.name in ['fabric', 'neoforge']) {
+if (sub.name in ['fabric', 'neoforge'] && commonProject != null) {
     sub.configurations {
         commonJava { canBeResolved = true }
         commonResources { canBeResolved = true }
     }
 
-    def commonPath = "${modProject.path}:common"
+    def commonPath = commonProject.path
     def commonDep = sub.dependencies.project(path: commonPath)
     def commonJavaDep = sub.dependencies.project(path: commonPath, configuration: 'commonJava')
     def commonResDep = sub.dependencies.project(path: commonPath, configuration: 'commonResources')
@@ -231,8 +232,11 @@ if (sub.name == 'fabric') {
     }
 
     sub.extensions.configure('loom') { loom ->
-        def aw = sub.project("${modProject.path}:common").file("src/main/resources/${sub.ext.mod_id}.accesswidener")
-        if (aw.exists()) {
+        def aw = [
+                commonProject?.file("src/main/resources/${sub.ext.mod_id}.accesswidener"),
+                sub.file("src/main/resources/${sub.ext.mod_id}.accesswidener")
+        ].find { it?.isFile() }
+        if (aw != null) {
             loom.accessWidenerPath.set(aw)
         }
 
@@ -267,8 +271,11 @@ if (sub.name == 'neoforge') {
     sub.extensions.configure('neoForge') { neoForge ->
         neoForge.version = modProp('neoforge_version')
 
-        def at = sub.project("${modProject.path}:common").file('src/main/resources/META-INF/accesstransformer.cfg')
-        if (at.exists()) {
+        def at = [
+                commonProject?.file('src/main/resources/META-INF/accesstransformer.cfg'),
+                sub.file('src/main/resources/META-INF/accesstransformer.cfg')
+        ].find { it?.isFile() }
+        if (at != null) {
             neoForge.accessTransformers.from(at.absolutePath)
         }
 
