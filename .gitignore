@@ -27,3 +27,7 @@ runs
 
 # publishing
 **/release-notes.md
+
+# datagen (generated resources are not committed)
+**/src/main/generated/
+**/src/generated/
