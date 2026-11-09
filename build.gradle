@@ -30,6 +30,21 @@ subprojects { Project sub ->
 // Root Collection & Lifecycle Tasks
 // -----------------------------------------------------------------------------
 
+// Regenerates data for every active loader. Generated data is not committed,
+// so run this before packaging a release.
+tasks.register('generateData') {
+    group = 'development'
+    description = 'Runs data generation for every active Fabric and NeoForge loader.'
+    dependsOn provider {
+        subprojects.findAll { it.name in ['fabric', 'neoforge'] }
+                .collectMany { p ->
+                    def taskName = p.name == 'fabric' ? 'runDatagen' : 'runData'
+                    def task = p.tasks.findByName(taskName)
+                    task != null ? [task] : []
+                }
+    }
+}
+
 // Collects final release jars into root build/libs/<mod-name>/
 tasks.register('collectJars', Sync) {
     group = 'build'

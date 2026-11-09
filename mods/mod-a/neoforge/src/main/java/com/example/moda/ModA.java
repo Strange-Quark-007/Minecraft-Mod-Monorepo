@@ -9,5 +9,6 @@ public class ModA {
     public ModA(IEventBus eventBus) {
         Constants.LOG.info("Hello NeoForge world from {}!", Constants.MOD_NAME);
         CommonClass.init();
+        eventBus.addListener(ModDataGenerator::gatherData);
     }
 }
