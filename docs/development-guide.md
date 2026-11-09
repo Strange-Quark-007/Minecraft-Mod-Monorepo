@@ -116,6 +116,19 @@ Loader-local access files also work when `common` is removed:
 * **Loader subprojects:** The `fabric` and `neoforge` projects load the common code and define platform-specific implementations. They have access to all common code, but common code cannot directly access loader code.
 * **Platform abstraction:** To call platform-specific logic from common code, use the included `IPlatformHelper` interface via Java's `ServiceLoader` (`Services.PLATFORM`).
 
+## Data Generation
+
+Datagen is configured per loader. Each loader has its own run task and output directory; generated files are not shared between platforms.
+
+* **Fabric:** `./gradlew :<mod>:fabric:runDatagen`
+  * Output: `mods/<mod>/fabric/src/main/generated/`
+  * Uses the `fabric-datagen` entrypoint in `fabric.mod.json`.
+* **NeoForge:** `./gradlew :<mod>:neoforge:runData`
+  * Output: `mods/<mod>/neoforge/src/generated/resources/`
+  * Uses the `data` run configuration.
+
+Generated data is not committed. The output directories are gitignored, and `./gradlew clean` deletes them. Each loader's `jar` task depends on its datagen task, so `./gradlew build` and `publishMods` regenerate data before packaging. Use `./gradlew generateData` to regenerate data without building. Single-loader mods only expose the task for the loader they keep; deleting a loader directory also removes its datagen configuration from the build. Provider implementations stay in each loader's source set because common code cannot reference loader datagen APIs.
+
 ## Dependencies
 
 ### Simple Java Dependencies
@@ -151,11 +164,14 @@ dependencies {
 | --- | --- |
 | `./gradlew createMod -Pname=<name>` | Generate a new mod from `gradle/template.zip` and register it in `settings.gradle`. |
 | `./gradlew purgeTemplates` | Delete demo starter mods (`mod-a`, `mod-b`) and unregister them from `settings.gradle`. |
+| `./gradlew generateData` | Run datagen for every active Fabric and NeoForge loader. |
 | `./gradlew build` | Compile all active mods and collect final jars into `build/libs/<mod>/`. |
 | `./gradlew clean` | Delete build directories across all mods and the root project. |
 | `./gradlew cleanModDevCache` | Delete the shared ModDevGradle artifact store. |
 | `./gradlew :<mod>:fabric:runClient` | Run the Fabric client for a specific mod. |
+| `./gradlew :<mod>:fabric:runDatagen` | Generate Fabric data into `fabric/src/main/generated/`. |
 | `./gradlew :<mod>:neoforge:runClient` | Run the NeoForge client for a specific mod. |
+| `./gradlew :<mod>:neoforge:runData` | Generate NeoForge data into `neoforge/src/generated/resources/`. |
 | `./gradlew :<mod>:fabric:build` | Build only the Fabric jar for a single mod. |
 | `./gradlew :<mod>:publishMods` | Build and publish releases for every configured loader of a specific mod. |
 
