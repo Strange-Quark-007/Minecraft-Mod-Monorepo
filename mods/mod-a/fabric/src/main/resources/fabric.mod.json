@@ -16,6 +16,9 @@
     "entrypoints": {
         "main": [
             "com.example.moda.ModA"
+        ],
+        "fabric-datagen": [
+            "com.example.moda.ModDataGenerator"
         ]
     },
     "mixins": [

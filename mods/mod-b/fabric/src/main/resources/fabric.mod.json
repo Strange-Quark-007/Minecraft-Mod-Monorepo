@@ -16,6 +16,9 @@
     "entrypoints": {
         "main": [
             "com.example.modb.ModB"
+        ],
+        "fabric-datagen": [
+            "com.example.modb.ModDataGenerator"
         ]
     },
     "mixins": [

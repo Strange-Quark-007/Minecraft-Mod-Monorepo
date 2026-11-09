@@ -255,6 +255,38 @@ if (sub.name == 'fabric') {
             }
         }
     }
+
+    // Fabric datagen is independent of NeoForge datagen. Keep the generated
+    // directory and run task inside this loader block so single-loader mods
+    // never reference a missing platform.
+    sub.extensions.configure('fabricApi') { fabricApi ->
+        fabricApi.configureDataGeneration { settings ->
+            settings.outputDirectory.set(sub.file('src/main/generated'))
+            settings.client.set(true)
+            settings.modId.set(sub.ext.mod_id)
+            // The generated directory is added to the source set output below.
+            // Do not also add it to processed resources.
+            settings.addToResources.set(false)
+        }
+    }
+
+    def fabricGeneratedDir = sub.file('src/main/generated')
+    def fabricDatagen = sub.tasks.named('runDatagen')
+    sub.sourceSets.main.output.dir(fabricGeneratedDir)
+    sub.tasks.named('jar') {
+        dependsOn fabricDatagen
+        // Datagen cache files are not game resources.
+        exclude '**/.cache/**'
+    }
+    ['javadoc', 'compileTestJava', 'test', 'runClient', 'runServer'].each { name ->
+        sub.tasks.named(name) {
+            dependsOn fabricDatagen
+        }
+    }
+
+    sub.tasks.named('clean') {
+        delete fabricGeneratedDir
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -295,7 +327,16 @@ if (sub.name == 'neoforge') {
             data {
                 clientData()
                 gameDirectory = sub.mkdir(sub.file('runs/data'))
-                programArguments.addAll '--mod', sub.ext.mod_id, '--all', '--output', sub.file('src/generated/resources/').absolutePath, '--existing', sub.file('src/main/resources/').absolutePath
+
+                def existingArgs = []
+                if (commonProject != null && commonProject.file('src/main/resources').exists()) {
+                    existingArgs.addAll(['--existing', commonProject.file('src/main/resources').absolutePath])
+                }
+                if (sub.file('src/main/resources').exists()) {
+                    existingArgs.addAll(['--existing', sub.file('src/main/resources').absolutePath])
+                }
+
+                programArguments.addAll(['--mod', sub.ext.mod_id, '--all', '--output', sub.file('src/generated/resources/').absolutePath] + existingArgs)
             }
         }
 
@@ -306,7 +347,23 @@ if (sub.name == 'neoforge') {
         }
     }
 
-    sub.sourceSets.main.resources { srcDir 'src/generated/resources' }
+    def neoGeneratedDir = sub.file('src/generated/resources')
+    def neoDatagen = sub.tasks.named('runData')
+    sub.sourceSets.main.output.dir(neoGeneratedDir)
+    sub.tasks.named('jar') {
+        dependsOn neoDatagen
+        // Datagen cache files are not game resources.
+        exclude '**/.cache/**'
+    }
+    ['javadoc', 'compileTestJava', 'test', 'runClient', 'runServer'].each { name ->
+        sub.tasks.named(name) {
+            dependsOn neoDatagen
+        }
+    }
+
+    sub.tasks.named('clean') {
+        delete sub.file('src/generated')
+    }
 }
 
 // -----------------------------------------------------------------------------
