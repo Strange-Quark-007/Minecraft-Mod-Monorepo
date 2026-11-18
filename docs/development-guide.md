@@ -116,6 +116,21 @@ Loader-local access files also work when `common` is removed:
 * **Loader subprojects:** The `fabric` and `neoforge` projects load the common code and define platform-specific implementations. They have access to all common code, but common code cannot directly access loader code.
 * **Platform abstraction:** To call platform-specific logic from common code, use the included `IPlatformHelper` interface via Java's `ServiceLoader` (`Services.PLATFORM`).
 
+## Decompiled Sources & Search Navigation
+
+To navigate or debug Minecraft code, decompiled sources can be generated across all active mods with unified top-level commands:
+
+* `./gradlew genSources`: Decompiles and caches Minecraft sources for all active Fabric, NeoForge, and Common projects.
+* `./gradlew genSourcesFabric`: Decompiles Fabric sources via Loom.
+* `./gradlew genSourcesNeoForge`: Decompiles and caches Common (`vanilla-*-sources.jar`) and NeoForge (`minecraft-patched-*-sources.jar`) via ModDevGradle.
+
+### Clean Class Search in IntelliJ IDEA
+
+In multi-mod monorepos, multiple modules independently depending on decompiled Minecraft can cause Search Everywhere (**Double Shift** / **Ctrl+N**) to show duplicate classes. This monorepo prevents that in two ways:
+
+1. **Gradle Library Canonicalization:** `gradle/moddev-cache.gradle` automatically normalizes IDE library dependencies to point to the shared `.gradle/moddev-artifacts/` store. Because every mod shares the exact same canonical path on disk, IntelliJ merges them into a single Project Library entry across all mods.
+2. **Clean Minecraft Search Scope:** A shared IntelliJ Scope (`.idea/scopes/Clean_Minecraft_Search.xml`) is included in the repository. In Search Everywhere, you can select **Clean Minecraft Search** (or press `Alt+P` for "Project Files") to filter out any library noise and jump straight to the code.
+
 ## Data Generation
 
 Datagen is configured per loader. Each loader has its own run task and output directory; generated files are not shared between platforms.
@@ -173,6 +188,9 @@ dependencies {
 | --- | --- |
 | `./gradlew createMod -Pname=<name>` | Generate a new mod from `gradle/template.zip` and register it in `settings.gradle`. |
 | `./gradlew purgeTemplates` | Delete demo starter mods (`mod-a`, `mod-b`) and unregister them from `settings.gradle`. |
+| `./gradlew genSources` | Decompile and cache Minecraft sources for all active loaders repo-wide. |
+| `./gradlew genSourcesFabric` | Decompile Minecraft sources for Fabric via Loom. |
+| `./gradlew genSourcesNeoForge` | Decompile and cache Minecraft sources for Common and NeoForge via ModDevGradle. |
 | `./gradlew generateData` | Run datagen for every active Fabric and NeoForge loader. |
 | `./gradlew build` | Compile all active mods and collect final jars into `build/libs/<mod>/`. |
 | `./gradlew clean` | Delete build directories across all mods and the root project. |

@@ -30,6 +30,25 @@ subprojects { Project sub ->
 // Root Collection & Lifecycle Tasks
 // -----------------------------------------------------------------------------
 
+// Generates and caches decompiled Minecraft sources across all active loaders.
+tasks.register('genSourcesFabric') {
+    group = 'development'
+    description = 'Generates decompiled Minecraft sources for all active Fabric mods.'
+    dependsOn subprojects.findAll { it.name == 'fabric' }.collect { "${it.path}:genSources" }
+}
+
+tasks.register('genSourcesNeoForge') {
+    group = 'development'
+    description = 'Generates and caches decompiled Minecraft sources for all active Common and NeoForge mods.'
+    dependsOn subprojects.findAll { it.name in ['common', 'neoforge'] }.collect { "${it.path}:createMinecraftArtifacts" }
+}
+
+tasks.register('genSources') {
+    group = 'development'
+    description = 'Generates and caches decompiled Minecraft sources across all active loaders.'
+    dependsOn 'genSourcesFabric', 'genSourcesNeoForge'
+}
+
 // Regenerates data for every active loader. Generated data is not committed,
 // so run this before packaging a release.
 tasks.register('generateData') {
