@@ -7,6 +7,7 @@ NeoForge's ModDevGradle (`net.neoforged.moddev`) decompiles and patches Minecraf
 This monorepo eliminates that disk bloat using filesystem **hardlinks** via `gradle/moddev-cache.gradle`:
 
 * **Single physical copy on disk:** Jars across all mods share identical disk blocks through NTFS, ext4, or APFS hardlinks pointing to a shared store in `.gradle/moddev-artifacts/`. Each mod keeps a normal-looking file in its `build/` directory without changing task or IDE behavior.
+* **Single source of truth in IntelliJ:** During IDE sync, library dependency paths for Common and NeoForge are canonicalized to the shared `.gradle/moddev-artifacts/` store. IntelliJ merges them into a single Project Library entry, preventing duplicate search results in Search Everywhere (Double Shift).
 * **Access Transformer (AT) isolation:** Cache keys include a SHA-256 hash of all active `accesstransformer.cfg` files. Mods using different ATs are cached independently and never collide.
 * **Instant rebuilds after clean:** Because `.gradle/moddev-artifacts/` persists across `./gradlew clean`, a clean build on any mod restores hardlinks from the shared store instead of repeating decompilation.
 * **Parallel and concurrency safe:** Supports `org.gradle.parallel=true` and multi-process or CI runs through atomic staging (`.moddev-<uuid>.tmp` plus atomic rename) with Windows retry handling.
