@@ -230,3 +230,34 @@ cacheProject.tasks.matching { it.name == 'compileJava' }.configureEach {
 cacheProject.tasks.matching { it.name == 'neoForgeIdeSync' }.configureEach {
     dependsOn linkTask
 }
+
+// -----------------------------------------------------------------------------
+// IDE Library Normalization (Single Source of Truth)
+// -----------------------------------------------------------------------------
+// By default, ModDevGradle registers mod-local build/moddev/artifacts/ paths
+// in each subproject's library dependencies. Because every mod has a distinct
+// folder, IntelliJ indexes multiple copies of the exact same decompiled Minecraft
+// classes, causing duplicate search results in Search Everywhere (Double Shift).
+//
+// We canonicalize the library paths to point directly to the shared store at
+// setStore. Because all mods point to the exact same file path on disk, IntelliJ
+// deduplicates them into a single Project Library entry across the monorepo.
+
+cacheProject.apply plugin: 'idea'
+
+cacheProject.idea.module.iml.whenMerged { module ->
+    module.dependencies.each { dep ->
+        if (dep.hasProperty('file') && dep.file != null && isManagedArtifact(dep.file as File)) {
+            File canonicalStoreFile = new File(setStore, (dep.file as File).name)
+            if (canonicalStoreFile.exists()) {
+                dep.file = canonicalStoreFile
+            }
+        }
+        if (dep.hasProperty('source') && dep.source != null && isManagedArtifact(dep.source as File)) {
+            File canonicalStoreSource = new File(setStore, (dep.source as File).name)
+            if (canonicalStoreSource.exists()) {
+                dep.source = canonicalStoreSource
+            }
+        }
+    }
+}
